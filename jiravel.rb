@@ -114,7 +114,7 @@ load_mise_env
 options     = parse_options
 project_key = ARGV[0]
 
-abort("Usage: jiravel PROJECT_KEY [--weeks-ago=N] [--years-ago=N]") unless project_key
+abort("Usage: jiravel PROJECT_KEY [--weeks-ago=N] [--years-ago=N] [-q]") unless project_key
 abort("Invalid project key") unless project_key.match?(/\A[A-Z][A-Z0-9_]+\z/i)
 
 jira_url    = ENV.fetch('JIRA_URL')       { abort("JIRA_URL not set") }.chomp('/')
