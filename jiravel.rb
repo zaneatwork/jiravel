@@ -48,8 +48,24 @@ def target_week(weeks_ago:, years_ago:)
   [week_start, week_start + 6]
 end
 
-def build_jql(project_key, week_start, week_end)
-  "project = \"#{project_key}\" AND status changed to (\"Done\", \"Dev Complete\") " \
+def fetch_completed_statuses(jira_url, project_key, credentials)
+  uri = URI("#{jira_url}/rest/api/3/project/#{project_key}/statuses")
+  http = build_http(jira_url)
+  req = Net::HTTP::Get.new(uri)
+  req['Authorization'] = "Basic #{Base64.strict_encode64(credentials)}"
+  req['Accept'] = 'application/json'
+  res = http.request(req)
+  abort("JIRA error #{res.code}: #{res.body}") unless res.is_a?(Net::HTTPSuccess)
+  JSON.parse(res.body)
+    .flat_map { |t| t['statuses'] }
+    .uniq { |s| s['id'] }
+    .select { |s| s.dig('statusCategory', 'key') == 'done' || s['name'].downcase == 'dev complete' }
+    .map { |s| s['name'] }
+end
+
+def build_jql(project_key, week_start, week_end, done_statuses)
+  quoted = done_statuses.map { |s| "\"#{s}\"" }.join(', ')
+  "project = \"#{project_key}\" AND status changed to (#{quoted}) " \
   "during (\"#{week_start}\", \"#{week_end}\")"
 end
 
@@ -70,7 +86,7 @@ def fetch_tickets(jira_url, jql, credentials)
   next_page_token = nil
 
   loop do
-    body = { jql: jql, maxResults: 100, fields: ['summary'] }
+    body = { jql: jql, maxResults: 100, fields: ['summary', 'status'] }
     body[:nextPageToken] = next_page_token if next_page_token
 
     req                  = Net::HTTP::Post.new(uri)
@@ -84,7 +100,7 @@ def fetch_tickets(jira_url, jql, credentials)
 
     data = JSON.parse(res.body)
     data['issues'].each do |issue|
-      tickets << { key: issue['key'], summary: issue.dig('fields', 'summary').to_s }
+      tickets << { key: issue['key'], summary: issue.dig('fields', 'summary').to_s, status: issue.dig('fields', 'status', 'name').to_s }
     end
     next_page_token = data['nextPageToken']
     break if data['issues'].empty? || !next_page_token
@@ -102,10 +118,19 @@ def truncate(str, max)
 end
 
 def print_results(tickets, quiet:)
-  headline = tickets.empty? ? "No tickets completed this week." : "#{tickets.size} tickets completed this week."
+  if tickets.empty?
+    puts "No tickets completed this week."
+    return
+  end
+
+  breakdown = tickets.group_by { |t| t[:status] }
+    .map { |status, ts| "#{status}: #{ts.size}" }
+    .join(', ')
+  headline = "#{tickets.size} tickets completed this week. (#{breakdown})"
   puts quiet ? headline : bold(headline)
-  return if quiet || tickets.empty?
-  tickets.each { |t| puts "- #{t[:key]}: #{truncate(t[:summary], 64)}" }
+  return if quiet
+
+  tickets.each { |t| puts "- #{t[:key]}: (#{t[:status]}) #{truncate(t[:summary], 64)}" }
 end
 
 
@@ -123,7 +148,8 @@ email       = ENV.fetch('JIRA_EMAIL')     { abort("JIRA_EMAIL not set") }
 credentials = "#{email}:#{api_token}"
 
 week_start, week_end = target_week(weeks_ago: options[:weeks_ago], years_ago: options[:years_ago])
-jql     = build_jql(project_key, week_start, week_end)
+done_statuses = fetch_completed_statuses(jira_url, project_key, credentials)
+jql     = build_jql(project_key, week_start, week_end, done_statuses)
 tickets = fetch_tickets(jira_url, jql, credentials)
 
 print_results(tickets, quiet: options[:quiet])
