@@ -29,12 +29,13 @@ def load_mise_env
 end
 
 def parse_options
-  options = { weeks_ago: 0, years_ago: 0, quiet: false }
+  options = { weeks_ago: 0, years_ago: 0, quiet: false, debug: false }
   OptionParser.new do |opts|
     opts.banner = "Usage: jiravel PROJECT_KEY [options]"
     opts.on("--weeks-ago=N", Integer, "Target week N weeks ago (default: 0)") { |n| options[:weeks_ago] = n }
     opts.on("--years-ago=N", Integer, "Target week N years ago (default: 0)") { |n| options[:years_ago] = n }
     opts.on("-q", "--quiet", "Only print the summary line") { options[:quiet] = true }
+    opts.on("-d", "--debug", "Print the JQL query before executing") { options[:debug] = true }
   end.parse!
   options
 end
@@ -139,7 +140,7 @@ load_mise_env
 options     = parse_options
 project_key = ARGV[0]
 
-abort("Usage: jiravel PROJECT_KEY [--weeks-ago=N] [--years-ago=N] [-q]") unless project_key
+abort("Usage: jiravel PROJECT_KEY [--weeks-ago=N] [--years-ago=N] [-q] [-d]") unless project_key
 abort("Invalid project key") unless project_key.match?(/\A[A-Z][A-Z0-9_]+\z/i)
 
 jira_url    = ENV.fetch('JIRA_URL')       { abort("JIRA_URL not set") }.chomp('/')
@@ -150,6 +151,7 @@ credentials = "#{email}:#{api_token}"
 week_start, week_end = target_week(weeks_ago: options[:weeks_ago], years_ago: options[:years_ago])
 done_statuses = fetch_completed_statuses(jira_url, project_key, credentials)
 jql     = build_jql(project_key, week_start, week_end, done_statuses)
+puts "JQL: #{jql}" if options[:debug]
 tickets = fetch_tickets(jira_url, jql, credentials)
 
 print_results(tickets, quiet: options[:quiet])

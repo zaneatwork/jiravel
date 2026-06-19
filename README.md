@@ -5,13 +5,14 @@ A lil tool to see JIRA project velocity. Counts up how many tickets have been mo
 ## Usage
 
 ```
-./jiravel.rb PROJECT_KEY [--weeks-ago=N] [--years-ago=N] [-q]
+./jiravel.rb PROJECT_KEY [--weeks-ago=N] [--years-ago=N] [-q] [-d]
 ```
 
 - `PROJECT_KEY` — JIRA project name
 - `--weeks-ago=N` — look at a week N weeks in the past (default: current week)
 - `--years-ago=N` — shift the anchor year back N years
 - `-q / --quiet` — print only the summary line, no ticket list
+- `-d / --debug` — print the JQL query before executing
 
 ## Environment Variables
 
